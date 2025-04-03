@@ -202,7 +202,7 @@ if (optional_param('savescheduling', false, PARAM_BOOL) && confirm_sesskey()) {
             $table->data[] = $row;
         }
 
-        echo html_writer::table($table);
+        echo $OUTPUT->render($table);
         echo html_writer::start_tag('div', ['class' => 'mdl-align']);
         echo html_writer::empty_tag('input', ['type' => 'submit', 'name' => 'savescheduling', 'value' => get_string('savechanges')]);
         echo html_writer::end_tag('div');
