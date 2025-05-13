@@ -56,5 +56,14 @@ function xmldb_local_purgeoldassignments_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2025031300, 'local', 'purgeoldassignments');
     }
 
+    if ($oldversion < 2025051300) {
+
+        // Delete broken table rows.
+        $DB->delete_records('local_purgeoldassignments', ['timespan' => '0']);
+
+        // Purgeoldassignments savepoint reached.
+        upgrade_plugin_savepoint(true, 2025051300, 'local', 'purgeoldassignments');
+    }
+
     return true;
 }
