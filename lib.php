@@ -63,7 +63,7 @@ function local_purgeoldassignments_extend_settings_navigation(navigation_node $n
 function local_purgeoldassignments_purge(int $contextid, $component, int $purge) {
     global $DB;
 
-    if (empty($purge) || empty($component) || empty($contextid)) {
+    if (empty($component) || empty($contextid)) {
         // Safety check.
         return;
     }
@@ -71,7 +71,7 @@ function local_purgeoldassignments_purge(int $contextid, $component, int $purge)
         // Not an allowed component.
         return;
     }
-    if ($purge < 1) {
+    if ($purge < 0) {
         return;
     }
     // Check to make sure contextid is valid - if not ignore and return.
