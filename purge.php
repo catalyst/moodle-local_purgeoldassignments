@@ -51,30 +51,40 @@ if (optional_param('savescheduling', false, PARAM_BOOL) && confirm_sesskey()) {
         $scheduled = optional_param($component . 'scheduled', false, PARAM_BOOL);
         $newtimespan = optional_param($component . 'timespan', '', PARAM_ALPHANUM);
         $currentrecord = $DB->get_record('local_purgeoldassignments', ['cmid' => $id, 'component' => $component]);
+        $incompleteconfig = false;
 
         if ($currentrecord && !$scheduled) {
             $DB->delete_records('local_purgeoldassignments', ['id' => $currentrecord->id]);
-        } else if ($scheduled && is_numeric($newtimespan)) {
-            if ($currentrecord && ($newtimespan != $currentrecord->timespan)) {
-                $newdata = new stdClass();
-                $newdata->id = $currentrecord->id;
-                $newdata->timespan = $newtimespan;
-                $newdata->timemodified = time();
-                $newdata->usermodified = $USER->id;
-                $DB->update_record('local_purgeoldassignments', $newdata);
-            } else if (!$currentrecord) {
-                $data = new stdClass();
-                $data->cmid = $id;
-                $data->component = $component;
-                $data->timespan = $newtimespan;
-                $data->timemodified = time();
-                $data->usermodified = $USER->id;
-                $DB->insert_record('local_purgeoldassignments', $data);
+        } else if ($scheduled) {
+            if (!empty($newtimespan)) {
+                if ($currentrecord && ($newtimespan != $currentrecord->timespan)) {
+                    $newdata = new stdClass();
+                    $newdata->id = $currentrecord->id;
+                    $newdata->timespan = $newtimespan;
+                    $newdata->timemodified = time();
+                    $newdata->usermodified = $USER->id;
+                    $DB->update_record('local_purgeoldassignments', $newdata);
+                } else if (!$currentrecord) {
+                    $data = new stdClass();
+                    $data->cmid = $id;
+                    $data->component = $component;
+                    $data->timespan = $newtimespan;
+                    $data->timemodified = time();
+                    $data->usermodified = $USER->id;
+                    $DB->insert_record('local_purgeoldassignments', $data);
+                }
+            } else {
+                $incompleteconfig = true;
             }
         }
     }
     $url->remove_params('purge', 'component');
-    redirect($url, get_string('changessaved'), 1);
+
+    if ($incompleteconfig) {
+        redirect($url, get_string('incompleteconfig', 'local_purgeoldassignments'), 1, \core\output\notification::NOTIFY_WARNING);
+    } else {
+        redirect($url, get_string('changessaved'), 1);
+    }
 
 } else if (!empty($purge) && $confirm === 1 && confirm_sesskey()) {
     // Schedule deletion task.
