@@ -48,32 +48,43 @@ if (optional_param('savescheduling', false, PARAM_BOOL) && confirm_sesskey()) {
     $components = local_purgeoldassignments_components();
 
     foreach ($components as $component) {
-        $scheduled = optional_param($component . 'scheduled', false, PARAM_INT);
-        $newtimespan = (string) optional_param($component . 'timespan', false, PARAM_INT);
-        $currenttimespan = $DB->get_field('local_purgeoldassignments', 'timespan', ['cmid' => $id, 'component' => $component]);
+        $scheduled = optional_param($component . 'scheduled', false, PARAM_BOOL);
+        $newtimespan = optional_param($component . 'timespan', '', PARAM_ALPHANUM);
+        $currentrecord = $DB->get_record('local_purgeoldassignments', ['cmid' => $id, 'component' => $component]);
+        $incompleteconfig = false;
 
-        if ($currenttimespan && $scheduled == false) {
-            $DB->delete_records('local_purgeoldassignments', ['cmid' => $id, 'component' => $component]);
+        if ($currentrecord && !$scheduled) {
+            $DB->delete_records('local_purgeoldassignments', ['id' => $currentrecord->id]);
         } else if ($scheduled) {
-            if ($currenttimespan && $newtimespan !== $currenttimespan) {
-                $newdata = new stdClass();
-                $newdata->timespan = $newtimespan;
-                $newdata->timemodified = time();
-                $newdata->usermodified = $USER->id;
-                $DB->set_fields('local_purgeoldassignments', $newdata, ['cmid' => $id, 'component' => $component]);
-            } else if (empty($currenttimespan)) {
-                $data = new stdClass();
-                $data->cmid = $id;
-                $data->component = $component;
-                $data->timespan = $newtimespan;
-                $data->timemodified = time();
-                $data->usermodified = $USER->id;
-                $DB->insert_record('local_purgeoldassignments', $data);
+            if (!empty($newtimespan)) {
+                if ($currentrecord && ($newtimespan != $currentrecord->timespan)) {
+                    $newdata = new stdClass();
+                    $newdata->id = $currentrecord->id;
+                    $newdata->timespan = $newtimespan;
+                    $newdata->timemodified = time();
+                    $newdata->usermodified = $USER->id;
+                    $DB->update_record('local_purgeoldassignments', $newdata);
+                } else if (!$currentrecord) {
+                    $data = new stdClass();
+                    $data->cmid = $id;
+                    $data->component = $component;
+                    $data->timespan = $newtimespan;
+                    $data->timemodified = time();
+                    $data->usermodified = $USER->id;
+                    $DB->insert_record('local_purgeoldassignments', $data);
+                }
+            } else {
+                $incompleteconfig = true;
             }
         }
     }
     $url->remove_params('purge', 'component');
-    redirect($url, get_string('changessaved'), 1);
+
+    if ($incompleteconfig) {
+        redirect($url, get_string('incompleteconfig', 'local_purgeoldassignments'), 1, \core\output\notification::NOTIFY_WARNING);
+    } else {
+        redirect($url, get_string('changessaved'), 1);
+    }
 
 } else if (!empty($purge) && $confirm === 1 && confirm_sesskey()) {
     // Schedule deletion task.
@@ -183,9 +194,9 @@ if (optional_param('savescheduling', false, PARAM_BOOL) && confirm_sesskey()) {
 
             $row[] = $componentinfo;
 
-            $currenttimespan = $DB->get_field('local_purgeoldassignments', 'timespan', ['cmid' => $id, 'component' => $component]);
+            $currentrecord = $DB->get_record('local_purgeoldassignments', ['cmid' => $id, 'component' => $component]);
 
-            $isenabled = $currenttimespan ? 1 : 0;
+            $isenabled = $currentrecord ? true : false;
             $enable = html_writer::checkbox($component . 'scheduled', 1, $isenabled);
             $row[] = $enable;
 
@@ -195,7 +206,7 @@ if (optional_param('savescheduling', false, PARAM_BOOL) && confirm_sesskey()) {
                 2 => '2 years',
                 3 => '3 years'
             ];
-            $selected = $currenttimespan ? $currenttimespan : '';
+            $selected = $currentrecord ? $currentrecord->timespan : '';
             $select .= html_writer::select($choices, $component . 'timespan', $selected);
             $row[] = $select;
 

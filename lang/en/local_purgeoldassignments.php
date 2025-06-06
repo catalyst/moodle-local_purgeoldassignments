@@ -36,6 +36,7 @@ $string['componentolderthan3'] = 'Older than 3 years: {$a}';
 $string['enablesheduledpurge'] = 'Enable scheduled purge';
 $string['purgefilesolderthan'] = "Purge files older than:";
 $string['areyousure'] = 'This action will delete historical data from the component {$a} in this assignment. This action is not reversible and causes data-loss, are you sure you want to do this?';
+$string['incompleteconfig'] = 'Some changes could not be saved as no schedule was set. For each component you wish to enable the scheduled purge for, make sure to tick the checkbox and set a value in the "Schedule for files older than" dropdown.';
 $string['purgetriggered'] = 'The purge action was scheduled.';
 $string['schedulefor'] = 'Schedule for files older than';
 $string['sizeinfo'] = 'Size info';
