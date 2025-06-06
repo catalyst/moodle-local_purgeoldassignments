@@ -57,13 +57,13 @@ function local_purgeoldassignments_extend_settings_navigation(navigation_node $n
  *
  * @param int $contextid
  * @param string $component
- * @param int $purge
+ * @param int|float $purge
  * @return int count of deletions.
  */
-function local_purgeoldassignments_purge(int $contextid, $component, int $purge) {
+function local_purgeoldassignments_purge(int $contextid, $component, $purge) {
     global $DB;
 
-    if (empty($purge) || empty($component) || empty($contextid)) {
+    if (!is_numeric($purge) || empty($component) || empty($contextid)) {
         // Safety check.
         return;
     }
@@ -71,7 +71,7 @@ function local_purgeoldassignments_purge(int $contextid, $component, int $purge)
         // Not an allowed component.
         return;
     }
-    if ($purge < 1) {
+    if ($purge < 0) {
         return;
     }
     // Check to make sure contextid is valid - if not ignore and return.
