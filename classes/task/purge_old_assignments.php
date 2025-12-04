@@ -43,9 +43,13 @@ class purge_old_assignments extends \core\task\scheduled_task {
         $filestopurge = $DB->get_records('local_purgeoldassignments');
 
         foreach ($filestopurge as $file) {
-            $context = \context_module::instance($file->cmid);
+            $context = \context_module::instance($file->cmid, IGNORE_MISSING);
 
-            local_purgeoldassignments_purge($context->id, $file->component, $file->timespan);
+            if (!empty($context)) {
+                local_purgeoldassignments_purge($context->id, $file->component, $file->timespan);
+            } else {
+                $DB->delete_records_list('local_purgeoldassignments', 'id', [$file->id]);
+            }
         }
     }
 }
