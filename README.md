@@ -7,8 +7,8 @@ This plugin allows a site manager to delete historical files stored within an as
 * assignsubmission_file
 
 Purging files can be done in two ways:
-- manual purge: schedules an adhoc task for the selected file area and interval.
-- automated purge: can be enabled by file area, each with its own interval.
+- manual purge: schedules a one-off adhoc task for the selected file area and interval.
+- ongoing automated purge: can be enabled by file area, each with its own interval. When the scheduled task runs, each configured file area will be checked and purged if files are older than the set interval.
 
 This was developed for a specific use-case and there is room for improvement - pull requests are always welcome.
 
