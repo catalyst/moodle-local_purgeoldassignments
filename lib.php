@@ -123,8 +123,13 @@ function local_purgeoldassignments_get_stats($contextid) {
 
     // File areas we want to allow purging.
     $fileareas = local_purgeoldassignments_components();
-    [$componentsql, $params] = $DB->get_in_or_equal($fileareas, SQL_PARAMS_NAMED);
     $filesizes = [];
+    foreach ($fileareas as $filearea) {
+        $filesizes[$filearea] = new stdClass();
+    }
+
+    // Base SQL.
+    [$componentsql, $params] = $DB->get_in_or_equal($fileareas, SQL_PARAMS_NAMED);
     $sqlbase = "SELECT sum(filesize) as filesize, component
              FROM {files}
             WHERE component {$componentsql}
@@ -132,9 +137,10 @@ function local_purgeoldassignments_get_stats($contextid) {
                   and contextid = :context";
     $sqlend = " GROUP BY component";
     $params['context'] = $contextid;
+
+    // Get total stats.
     $records = $DB->get_records_sql($sqlbase . $sqlend, $params);
     foreach ($records as $record) {
-        $filesizes[$record->component] = new stdClass();
         if (!empty($record->filesize)) {
             $filesizes[$record->component]->total = $record->filesize;
         }
