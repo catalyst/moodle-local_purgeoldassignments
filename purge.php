@@ -85,7 +85,7 @@ if (optional_param('savescheduling', false, PARAM_BOOL) && confirm_sesskey()) {
     } else {
         redirect($url, get_string('changessaved'), 1);
     }
-} else if (!empty($purge) && $confirm === 1 && confirm_sesskey()) {
+} else if (is_numeric($purge) && $confirm === 1 && confirm_sesskey()) {
     // Schedule deletion task.
     $task = new \local_purgeoldassignments\task\purge();
     // Add custom data.
@@ -103,7 +103,7 @@ if (optional_param('savescheduling', false, PARAM_BOOL) && confirm_sesskey()) {
     echo $OUTPUT->header();
 
     if ($confirm === 2) {
-        $purgeoptions = [1, 2, 3];
+        $purgeoptions = [0, 1, 2, 3];
         if (!in_array($purge, $purgeoptions)) {
             echo "invalid purge option";
             die;
@@ -153,10 +153,13 @@ if (optional_param('savescheduling', false, PARAM_BOOL) && confirm_sesskey()) {
 
             $totalsize = !empty($filesize->total) ? $filesize->total : 0;
 
-            $componentinfo = html_writer::tag(
-                'p',
-                get_string('componentcurrentsize', 'local_purgeoldassignments', display_size($totalsize))
-            );
+            $filesizetotal = get_string('componentcurrentsize', 'local_purgeoldassignments', display_size($totalsize));
+            if (empty($tasksrunning[$component]) && ($totalsize > 0)) {
+                $purgeurl = new moodle_url($url, ['component' => $component, 'purge' => "0", 'confirm' => 2]);
+                $filesizetotal .=
+                    ' (' . html_writer::link($purgeurl, get_string('manualpurge', 'local_purgeoldassignments')) . ')';
+            }
+            $componentinfo = html_writer::tag('p', $filesizetotal);
 
             if (!empty($totalsize)) {
                 $filesizesperperiods = [];
