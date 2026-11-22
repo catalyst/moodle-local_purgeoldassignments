@@ -142,7 +142,7 @@ $cm = $DB->get_record_sql("SELECT cm.*, md.name AS modname
                             FROM {course_modules} cm
                             JOIN {modules} md ON md.id = cm.module
                             WHERE cm.id = ?", [$context->instanceid]);
-if ($cm->modname != 'assign') {
+if (!$cm || $cm->modname !== 'assign') {
     cli_error("Context not assignment.");
 }
 
@@ -150,7 +150,7 @@ if (!isset($componentname)) {
     cli_error("Component not specified.");
 }
 
-if (!in_array($componentname, local_purgeoldassignments_components())) {
+if (!in_array($componentname, local_purgeoldassignments_components(), true)) {
     cli_error("Component must be one of:\n" . implode(', ', local_purgeoldassignments_components()));
 }
 

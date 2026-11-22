@@ -23,21 +23,22 @@
  */
 
 /**
- * Inject a button for cleaning up old assignments.
+ * Maximum age, in years, that can be selected for a purge.
+ */
+define('LOCAL_PURGEOLDASSIGNMENTS_MAX_YEARS', 10);
+
+/**
+ * Inject a link for cleaning up old assignment files into the assignment settings.
  *
- * @param navigation_node $navigation
- * @param stdclass $context
+ * @param settings_navigation $navigation
+ * @param context $context
  * @return void
  */
-function local_purgeoldassignments_extend_settings_navigation(navigation_node $navigation, $context) {
-    global $PAGE;
-    $cm = $PAGE->cm;
+function local_purgeoldassignments_extend_settings_navigation(settings_navigation $navigation, context $context): void {
+    $cm = $navigation->get_page()->cm;
 
-    if (!$cm) {
-        return false;
-    }
-    if ($cm->modname != 'assign') {
-        return false;
+    if (!$cm || $cm->modname !== 'assign') {
+        return;
     }
     if (!$assignsettingsnode = $navigation->find('modulesettings', navigation_node::TYPE_SETTING)) {
         return;
@@ -47,46 +48,65 @@ function local_purgeoldassignments_extend_settings_navigation(navigation_node $n
     }
     $node = navigation_node::create(
         get_string('pluginname', 'local_purgeoldassignments'),
-        new moodle_url('/local/purgeoldassignments/purge.php', ['id' => $cm->id]),
-        navigation_node::TYPE_SETTING
+        new \core\url('/local/purgeoldassignments/purge.php', ['id' => $cm->id]),
+        navigation_node::TYPE_SETTING,
+        null,
+        'local_purgeoldassignments'
     );
     $assignsettingsnode->add_node($node);
 }
 
 /**
- * Purge selected files.
+ * Purge files of an assignment component that are older than the given number of years.
  *
- * @param int $contextid
- * @param string $component
- * @param int|float $purge
+ * @param int $contextid The assignment module context id.
+ * @param string $component One of {@see local_purgeoldassignments_components()}.
+ * @param int|float $purge Minimum file age in years.
  * @return int count of deletions.
  */
-function local_purgeoldassignments_purge(int $contextid, $component, $purge) {
+function local_purgeoldassignments_purge(int $contextid, $component, $purge): int {
     global $DB;
 
-    if (!is_numeric($purge) || empty($component) || empty($contextid)) {
+    if (!is_numeric($purge) || $purge < 0 || empty($component) || empty($contextid)) {
         // Safety check.
-        return;
+        return 0;
     }
-    if (!in_array($component, local_purgeoldassignments_components())) {
+    if (!in_array($component, local_purgeoldassignments_components(), true)) {
         // Not an allowed component.
-        return;
+        return 0;
     }
-    if ($purge < 0) {
-        return;
-    }
-    // Check to make sure contextid is valid - if not ignore and return.
+    // Check to make sure contextid is valid and belongs to an assignment - if not ignore and return.
     $context = context::instance_by_id($contextid, IGNORE_MISSING);
-    if (empty($context)) {
-        return;
+    if (empty($context) || $context->contextlevel != CONTEXT_MODULE) {
+        return 0;
+    }
+    $modname = $DB->get_field_sql(
+        "SELECT md.name
+           FROM {course_modules} cm
+           JOIN {modules} md ON md.id = cm.module
+          WHERE cm.id = :cmid",
+        ['cmid' => $context->instanceid]
+    );
+    if ($modname !== 'assign') {
+        return 0;
     }
 
-    $olderthan = time() - (YEARSECS * $purge);
+    $olderthan = time() - (int)round(YEARSECS * $purge);
 
     $sql = "SELECT *
-            FROM {files}
-            WHERE timemodified < :olderthan AND component = :component AND contextid = :contextid and filearea <> 'stamps'";
-    $params = ['olderthan' => $olderthan, 'component' => $component, 'contextid' => $contextid];
+              FROM {files}
+             WHERE timemodified < :olderthan
+               AND component = :component
+               AND contextid = :contextid
+               AND filearea <> :stamps
+               AND filename <> :dot";
+    $params = [
+        'olderthan' => $olderthan,
+        'component' => $component,
+        'contextid' => $contextid,
+        'stamps' => 'stamps',
+        'dot' => '.',
+    ];
     $records = $DB->get_recordset_sql($sql, $params);
     $fs = get_file_storage();
     $count = 0;
@@ -105,68 +125,89 @@ function local_purgeoldassignments_purge(int $contextid, $component, $purge) {
 /**
  * List of fileareas components we support.
  *
- * @return array
+ * @return string[]
  */
-function local_purgeoldassignments_components() {
-    return ['assignfeedback_editpdf',
-            'assignfeedback_file',
-            'assignsubmission_file'];
+function local_purgeoldassignments_components(): array {
+    return [
+        'assignfeedback_editpdf',
+        'assignfeedback_file',
+        'assignsubmission_file',
+    ];
 }
+
+/**
+ * The selectable purge ages, in years.
+ *
+ * @return array years => human readable label
+ */
+function local_purgeoldassignments_timespan_options(): array {
+    $options = [];
+    for ($years = 1; $years <= LOCAL_PURGEOLDASSIGNMENTS_MAX_YEARS; $years++) {
+        $options[$years] = ($years === 1)
+            ? get_string('oneyear', 'local_purgeoldassignments')
+            : get_string('numyears', 'local_purgeoldassignments', $years);
+    }
+    return $options;
+}
+
+/**
+ * Is the given value a valid purge age (in whole years)?
+ *
+ * @param mixed $years
+ * @return bool
+ */
+function local_purgeoldassignments_is_valid_timespan($years): bool {
+    return is_numeric($years) && (int)$years == $years
+        && $years >= 1 && $years <= LOCAL_PURGEOLDASSIGNMENTS_MAX_YEARS;
+}
+
 /**
  * Get existing filesize stats.
  *
+ * Returns an array keyed by component. Each value has a 'total' property and an 'olderthan'
+ * array keyed by number of years (1 .. LOCAL_PURGEOLDASSIGNMENTS_MAX_YEARS), containing only non-empty sizes.
+ *
  * @param int $contextid
- * @return array
+ * @return stdClass[]
  */
-function local_purgeoldassignments_get_stats($contextid) {
+function local_purgeoldassignments_get_stats(int $contextid): array {
     global $DB;
 
-    // File areas we want to allow purging.
-    $fileareas = local_purgeoldassignments_components();
-    [$componentsql, $params] = $DB->get_in_or_equal($fileareas, SQL_PARAMS_NAMED);
-    $filesizes = [];
-    $sqlbase = "SELECT sum(filesize) as filesize, component
-             FROM {files}
-            WHERE component {$componentsql}
-                  and filearea <> 'stamps'
-                  and contextid = :context";
+    [$componentsql, $params] = $DB->get_in_or_equal(local_purgeoldassignments_components(), SQL_PARAMS_NAMED);
+    $params['contextid'] = $contextid;
+    $params['stamps'] = 'stamps';
+
+    $sqlbase = "SELECT component, SUM(filesize) AS filesize
+                  FROM {files}
+                 WHERE component {$componentsql}
+                   AND filearea <> :stamps
+                   AND contextid = :contextid";
     $sqlend = " GROUP BY component";
-    $params['context'] = $contextid;
+
+    $filesizes = [];
     $records = $DB->get_records_sql($sqlbase . $sqlend, $params);
     foreach ($records as $record) {
-        $filesizes[$record->component] = new stdClass();
-        if (!empty($record->filesize)) {
-            $filesizes[$record->component]->total = $record->filesize;
-        }
+        $filesizes[$record->component] = (object)[
+            'total' => (int)$record->filesize,
+            'olderthan' => [],
+        ];
+    }
+    if (empty($filesizes)) {
+        return $filesizes;
     }
 
-    // Now get stats for older than 1 year.
-    $params['olderthan'] = time() - (YEARSECS);
-    $sql = $sqlbase . " AND timemodified < :olderthan " . $sqlend;
-    $records = $DB->get_records_sql($sql, $params);
-    foreach ($records as $record) {
-        if (!empty($record->filesize)) {
-            $filesizes[$record->component]->olderthan1 = $record->filesize;
+    $now = time();
+    for ($years = 1; $years <= LOCAL_PURGEOLDASSIGNMENTS_MAX_YEARS; $years++) {
+        $params['olderthan'] = $now - (YEARSECS * $years);
+        $records = $DB->get_records_sql($sqlbase . " AND timemodified < :olderthan" . $sqlend, $params);
+        if (empty($records)) {
+            // Nothing older than this, so nothing older than any larger value either.
+            break;
         }
-    }
-
-    // Now get stats for older than 2 years.
-    $params['olderthan'] = time() - (YEARSECS * 2);
-    $sql = $sqlbase . " AND timemodified < :olderthan " . $sqlend;
-    $records = $DB->get_records_sql($sql, $params);
-    foreach ($records as $record) {
-        if (!empty($record->filesize)) {
-            $filesizes[$record->component]->olderthan2 = $record->filesize;
-        }
-    }
-
-    // Now get stats for older than 3 year.
-    $params['olderthan'] = time() - (YEARSECS * 3);
-    $sql = $sqlbase . " AND timemodified < :olderthan " . $sqlend;
-    $records = $DB->get_records_sql($sql, $params);
-    foreach ($records as $record) {
-        if (!empty($record->filesize)) {
-            $filesizes[$record->component]->olderthan3 = $record->filesize;
+        foreach ($records as $record) {
+            if (!empty($record->filesize) && isset($filesizes[$record->component])) {
+                $filesizes[$record->component]->olderthan[$years] = (int)$record->filesize;
+            }
         }
     }
 
