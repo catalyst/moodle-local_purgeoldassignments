@@ -63,5 +63,39 @@ function xmldb_local_purgeoldassignments_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2025051300, 'local', 'purgeoldassignments');
     }
 
+    if ($oldversion < 2026112200) {
+        $table = new xmldb_table('local_purgeoldassignments');
+
+        // Allow schedules of up to 10 years.
+        $field = new xmldb_field('timespan', XMLDB_TYPE_INTEGER, '2', null, XMLDB_NOTNULL, null, null, 'component');
+        $dbman->change_field_precision($table, $field);
+
+        // Remove duplicate schedules (keep the most recent one) before adding the unique index.
+        $duplicates = $DB->get_recordset_sql(
+            "SELECT cmid, component, MAX(id) AS keepid
+               FROM {local_purgeoldassignments}
+           GROUP BY cmid, component
+             HAVING COUNT(1) > 1"
+        );
+        foreach ($duplicates as $duplicate) {
+            $DB->delete_records_select(
+                'local_purgeoldassignments',
+                'cmid = :cmid AND component = :component AND id <> :keepid',
+                ['cmid' => $duplicate->cmid, 'component' => $duplicate->component, 'keepid' => $duplicate->keepid]
+            );
+        }
+        $duplicates->close();
+
+        $key = new xmldb_key('usermodified', XMLDB_KEY_FOREIGN, ['usermodified'], 'user', ['id']);
+        $dbman->add_key($table, $key);
+
+        $index = new xmldb_index('cmidcomponent', XMLDB_INDEX_UNIQUE, ['cmid', 'component']);
+        if (!$dbman->index_exists($table, $index)) {
+            $dbman->add_index($table, $index);
+        }
+
+        upgrade_plugin_savepoint(true, 2026112200, 'local', 'purgeoldassignments');
+    }
+
     return true;
 }

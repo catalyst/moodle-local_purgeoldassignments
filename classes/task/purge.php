@@ -19,7 +19,7 @@ namespace local_purgeoldassignments\task;
 use core\task\adhoc_task;
 
 /**
- * Class purge
+ * Ad hoc task performing a one-off purge of old files for one assignment component.
  *
  * @package    local_purgeoldassignments
  * @copyright  2025 Catalyst IT
@@ -27,15 +27,27 @@ use core\task\adhoc_task;
  */
 class purge extends adhoc_task {
     /**
+     * Get a descriptive name for this task (shown to admins).
+     *
+     * @return string
+     */
+    public function get_name() {
+        return get_string('task:purge', 'local_purgeoldassignments');
+    }
+
+    /**
      * Execute the ad hoc task.
      */
     public function execute() {
         global $CFG;
         require_once($CFG->dirroot . '/local/purgeoldassignments/lib.php');
 
-        $contextid = $this->get_custom_data()->contextid;
-        $component = $this->get_custom_data()->component;
-        $purge = $this->get_custom_data()->purge;
-        local_purgeoldassignments_purge($contextid, $component, $purge);
+        $data = $this->get_custom_data();
+        if (empty($data->contextid) || empty($data->component) || !isset($data->purge)) {
+            mtrace('Invalid custom data, nothing to purge.');
+            return;
+        }
+        $count = local_purgeoldassignments_purge((int)$data->contextid, (string)$data->component, $data->purge);
+        mtrace("Deleted {$count} file(s) from {$data->component} in context {$data->contextid}.");
     }
 }

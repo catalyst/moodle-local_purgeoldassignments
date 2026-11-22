@@ -40,16 +40,26 @@ class purge_old_assignments extends \core\task\scheduled_task {
         global $CFG, $DB;
         require_once($CFG->dirroot . '/local/purgeoldassignments/lib.php');
 
-        $filestopurge = $DB->get_records('local_purgeoldassignments');
+        $schedules = $DB->get_recordset('local_purgeoldassignments');
+        $orphaned = [];
 
-        foreach ($filestopurge as $file) {
-            $context = \context_module::instance($file->cmid, IGNORE_MISSING);
+        foreach ($schedules as $schedule) {
+            $context = \context_module::instance($schedule->cmid, IGNORE_MISSING);
 
-            if (!empty($context)) {
-                local_purgeoldassignments_purge($context->id, $file->component, $file->timespan);
-            } else {
-                $DB->delete_records_list('local_purgeoldassignments', 'id', [$file->id]);
+            if (empty($context)) {
+                // The course module no longer exists, remove the orphaned schedule.
+                $orphaned[] = $schedule->id;
+                continue;
             }
+            $count = local_purgeoldassignments_purge($context->id, $schedule->component, $schedule->timespan);
+            if ($count) {
+                mtrace("Deleted {$count} file(s) from {$schedule->component} in course module {$schedule->cmid}.");
+            }
+        }
+        $schedules->close();
+
+        if ($orphaned) {
+            $DB->delete_records_list('local_purgeoldassignments', 'id', $orphaned);
         }
     }
 }
