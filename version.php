@@ -25,8 +25,8 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component    = 'local_purgeoldassignments';
-$plugin->release      = 2025051300;
-$plugin->version      = 2025051300;
-$plugin->requires     = 2017111300;
-$plugin->supported    = [34, 405];
+$plugin->release      = 2026112200;
+$plugin->version      = 2026112200;
+$plugin->requires     = 2024100700; // Moodle 4.5.
+$plugin->supported    = [405, 503]; // Moodle 4.5 to 5.3.
 $plugin->maturity     = MATURITY_STABLE;
